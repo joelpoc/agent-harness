@@ -1,0 +1,41 @@
+# Harness policy — deny-by-default
+# Evaluated in order; first match wins.
+# MCP tools get stricter limits by default.
+
+default: DENY
+
+tools:
+  # Safe read-only tools
+  - pattern: echo
+    decision: ALLOW
+    reason: "Test tool — always safe"
+
+  - pattern: describe_schema
+    decision: ALLOW
+    reason: "Read-only schema introspection"
+
+  - pattern: query_data
+    decision: ALLOW
+    reason: "Read-only SQL queries"
+    deny_if:
+      sql:
+        - "DROP "
+        - "DELETE "
+        - "TRUNCATE "
+        - "ALTER "
+        - "INSERT "
+        - "UPDATE "
+
+  - pattern: generate_report
+    decision: ALLOW
+    reason: "Output formatting — no side effects"
+
+  # High-risk tools requiring human approval
+  - pattern: create_ticket
+    decision: REQUIRE_APPROVAL
+    reason: "Creates external side effects — requires human sign-off"
+
+  # MCP tools — stricter: require approval for all
+  - pattern: mcp/*
+    decision: REQUIRE_APPROVAL
+    reason: "All MCP tools require explicit human approval (belt-and-suspenders for external transport)"
