@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /Users/joel/Projects/agent-harness && uv run ruff check --fix $CLAUDE_TOOL_INPUT_FILE_PATH 2>/dev/null; uv run ruff format $CLAUDE_TOOL_INPUT_FILE_PATH 2>/dev/null; true"
+          }
+        ]
+      }
+    ]
+  },
+  "disabledMcpjsonServers": [
+    "Jira_Tempo"
+  ]
+}

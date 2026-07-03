@@ -1,0 +1,10 @@
+id: "012_cost_by_service_query"
+description: "Agent produces valid aggregation SQL grouping by service"
+user_message: "Show total cost by GCP service for the last 30 days"
+expected_tool_calls:
+  - tool: query_data
+expected_sql_pattern: "SELECT.*service.*SUM.*cost_usd.*GROUP BY.*service"
+expected_policy_decisions:
+  query_data: ALLOW
+adversarial: false
+recorded_response: null

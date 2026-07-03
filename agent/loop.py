@@ -23,6 +23,7 @@ from harness.budget import BudgetExceededError, BudgetTracker
 from harness.contracts import registry
 from harness.hooks import hooks
 from harness.policy import Decision, PolicyEngine
+from harness.tracing import Span, tracer
 
 MAX_TURNS = 20
 
@@ -63,6 +64,25 @@ async def run(
         # Accumulate cost from LiteLLM metadata
         cost = getattr(response, "_hidden_params", {}).get("response_cost", 0.0) or 0.0
         budget.record(cost)
+
+        tokens_in = response.usage.prompt_tokens if response.usage else 0
+        tokens_out = response.usage.completion_tokens if response.usage else 0
+
+        tracer.write(
+            Span(
+                trace_id=session_id,
+                span_id=f"{session_id}-turn-{_turn}",
+                name="model_call",
+                input={"model": model, "messages": len(messages)},
+                output={"tool_calls": len(response.choices[0].message.tool_calls or [])},
+                metadata={
+                    "tokens_in": tokens_in,
+                    "tokens_out": tokens_out,
+                    "cost_usd": cost,
+                    "latency_ms": latency_ms,
+                },
+            )
+        )
 
         msg = response.choices[0].message
         messages.append(msg.model_dump() if hasattr(msg, "model_dump") else dict(msg))
@@ -113,6 +133,21 @@ async def run(
                 outcome=outcome,
             )
             audit_logger.record(event)
+
+            tracer.write(
+                Span(
+                    trace_id=session_id,
+                    span_id=f"{session_id}-tool-{tool_name}-{_turn}",
+                    name="tool_call",
+                    input={"tool": tool_name, "args_hash": args_hash},
+                    output={"outcome": outcome, "result_len": len(str(tool_result))},
+                    metadata={
+                        "decision": decision.value,
+                        "approved_by_human": approved_by_human,
+                        "latency_ms": latency_ms,
+                    },
+                )
+            )
 
             await hooks.fire_post_tool_call(session_id, tool_name, args, tool_result, latency_ms)
 

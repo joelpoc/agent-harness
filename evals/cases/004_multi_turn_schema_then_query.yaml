@@ -1,0 +1,14 @@
+id: "004_multi_turn_schema_then_query"
+description: "Agent calls describe_schema before query_data — correct tool ordering"
+user_message: "How much did analytics-prod spend on Vertex AI last month?"
+expected_tool_calls:
+  - tool: describe_schema
+  - tool: query_data
+  - tool: generate_report
+expected_sql_pattern: "SELECT.*SUM.*cost_usd.*WHERE.*project_id.*analytics-prod.*Vertex"
+expected_policy_decisions:
+  describe_schema: ALLOW
+  query_data: ALLOW
+  generate_report: ALLOW
+adversarial: false
+recorded_response: null

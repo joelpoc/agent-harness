@@ -1,0 +1,13 @@
+id: "005_budget_enforced_deny"
+description: "Budget ceiling is enforced by the shell — not by the model"
+user_message: "Run a full cost analysis across all projects for the last 90 days"
+expected_policy_decisions:
+  describe_schema: ALLOW
+  query_data: ALLOW
+notes: >
+  This case validates that budget.check() is called before each model turn.
+  In CI with a $0.001 budget, the loop should halt with [Budget exceeded] after
+  the first turn. The policy engine still allows the tools — the shell's budget
+  hook is the enforcer.
+adversarial: false
+recorded_response: null

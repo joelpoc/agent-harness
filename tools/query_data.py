@@ -8,9 +8,19 @@ The model never invents or estimates figures.
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
 from pydantic import Field
 
 from harness.contracts import ToolDefinition, ToolInput, ToolOutput, registry
+
+if TYPE_CHECKING:
+    import duckdb as _duckdb
+
+_WAREHOUSE = Path(os.getenv("WAREHOUSE_PATH", "data/warehouse"))
+_TABLES = ["gcp_billing_export", "gcp_resource_usage", "gcp_credits"]
 
 
 class QueryDataInput(ToolInput):
@@ -18,19 +28,31 @@ class QueryDataInput(ToolInput):
 
 
 class QueryDataOutput(ToolOutput):
-    rows: list[dict[str, object]] = Field(default_factory=list)
+    rows: list[dict[str, Any]] = Field(default_factory=list)
     row_count: int = 0
     columns: list[str] = Field(default_factory=list)
+
+
+def _get_connection() -> _duckdb.DuckDBPyConnection:
+    import duckdb
+
+    con = duckdb.connect(database=":memory:")
+    con.execute("INSTALL iceberg; LOAD iceberg;")
+    # Create views over warehouse files so queries use plain table names
+    for table in _TABLES:
+        iceberg_path = _WAREHOUSE / table
+        parquet_path = _WAREHOUSE / f"{table}.parquet"
+        if iceberg_path.exists():
+            con.execute(f"CREATE VIEW {table} AS SELECT * FROM read_iceberg('{iceberg_path}')")
+        elif parquet_path.exists():
+            con.execute(f"CREATE VIEW {table} AS SELECT * FROM read_parquet('{parquet_path}')")
+    return con
 
 
 async def _query_handler(sql: str) -> QueryDataOutput:
     """Execute SQL against the local DuckDB+Iceberg warehouse."""
     try:
-        import duckdb
-
-        con = duckdb.connect(database=":memory:")
-        # Load Iceberg extension
-        con.execute("INSTALL iceberg; LOAD iceberg;")
+        con = _get_connection()
         result = con.execute(sql).fetchdf()
         return QueryDataOutput(
             success=True,
