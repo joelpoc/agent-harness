@@ -22,6 +22,7 @@ class TracingSettings(BaseSettings):
     langfuse_secret_key: str = Field(default="", alias="LANGFUSE_SECRET_KEY")
     langfuse_host: str = Field(default="https://cloud.langfuse.com", alias="LANGFUSE_HOST")
     local_traces_path: Path = Field(default=Path("traces.jsonl"), alias="LOCAL_TRACES_PATH")
+    phoenix_enabled: bool = Field(default=False, alias="PHOENIX_ENABLED")
 
 
 class Span(BaseModel):
@@ -45,6 +46,21 @@ class Tracer:
         self._local_path = self._settings.local_traces_path
         self._local_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_langfuse()
+        self._init_phoenix()
+
+    def _init_phoenix(self) -> None:
+        if not self._settings.phoenix_enabled:
+            return
+        try:
+            import phoenix as px  # type: ignore[import-untyped]
+            from openinference.instrumentation.litellm import (
+                LiteLLMInstrumentor,  # type: ignore[import-untyped]
+            )
+
+            px.launch_app()
+            LiteLLMInstrumentor().instrument()
+        except Exception:
+            pass  # Phoenix unavailable — continue without it
 
     def _init_langfuse(self) -> None:
         if self._settings.langfuse_public_key and self._settings.langfuse_secret_key:

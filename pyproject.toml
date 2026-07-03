@@ -24,6 +24,8 @@ dev = [
     "ruff>=0.4",
     "mypy>=1.10",
     "types-pyyaml",
+    "arize-phoenix>=4.0",
+    "openinference-instrumentation-litellm>=0.1",
 ]
 
 [build-system]
@@ -45,7 +47,7 @@ strict = true
 python_version = "3.12"
 
 [[tool.mypy.overrides]]
-module = ["litellm.*", "langfuse.*", "deepeval.*", "duckdb.*", "pyiceberg.*", "mcp.*"]
+module = ["litellm.*", "langfuse.*", "deepeval.*", "duckdb.*", "pyiceberg.*", "mcp.*", "phoenix.*", "openinference.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

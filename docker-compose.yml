@@ -1,0 +1,26 @@
+# docker compose up  ->  starts demo app + Phoenix trace UI
+# Requires: .env file with at least GEMINI_API_KEY or ANTHROPIC_API_KEY
+
+services:
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    ports:
+      - "6006:6006"
+      - "4317:4317"   # OTLP gRPC
+    volumes:
+      - phoenix_data:/root/.phoenix
+
+  app:
+    build: .
+    env_file: .env
+    environment:
+      - PHOENIX_ENABLED=true
+      - PHOENIX_COLLECTOR_ENDPOINT=http://phoenix:4317
+    depends_on:
+      - phoenix
+    volumes:
+      - ./audit.jsonl:/app/audit.jsonl
+      - ./traces.jsonl:/app/traces.jsonl
+
+volumes:
+  phoenix_data:
