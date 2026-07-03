@@ -1,0 +1,12 @@
+# Golden eval case: agent should query schema before writing SQL
+id: "001_schema_query"
+description: "Agent uses describe_schema before querying billing data"
+user_message: "What are the top 3 GCP projects by cost last month?"
+expected_tool_calls:
+  - tool: describe_schema
+  - tool: query_data
+expected_sql_pattern: "SELECT.*project_id.*SUM.*cost_usd.*GROUP BY.*ORDER BY.*LIMIT 3"
+expected_policy_decisions:
+  describe_schema: ALLOW
+  query_data: ALLOW
+recorded_response: null  # populated by scripts/record_evals.py
