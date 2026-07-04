@@ -42,7 +42,18 @@ async def run(
     budget = budget or BudgetTracker.from_settings()
     audit_logger = audit_logger or AuditLogger.from_settings()
 
-    messages: list[dict[str, Any]] = [{"role": "user", "content": user_message}]
+    messages: list[dict[str, Any]] = [
+        {
+            "role": "system",
+            "content": (
+                "You are a data analysis assistant with access to a GCP billing warehouse. "
+                "Use the available tools to answer the user's question. "
+                "Once you have gathered enough data, respond with a clear text answer — "
+                "do NOT keep calling tools after you have the information needed."
+            ),
+        },
+        {"role": "user", "content": user_message},
+    ]
     tools = registry.litellm_schemas()
 
     for _turn in range(MAX_TURNS):
