@@ -43,7 +43,7 @@ def _get_connection() -> _duckdb.DuckDBPyConnection:
         iceberg_path = _WAREHOUSE / table
         parquet_path = _WAREHOUSE / f"{table}.parquet"
         if iceberg_path.exists():
-            con.execute(f"CREATE VIEW {table} AS SELECT * FROM read_iceberg('{iceberg_path}')")
+            con.execute(f"CREATE VIEW {table} AS SELECT * FROM iceberg_scan('{iceberg_path}')")
         elif parquet_path.exists():
             con.execute(f"CREATE VIEW {table} AS SELECT * FROM read_parquet('{parquet_path}')")
     return con

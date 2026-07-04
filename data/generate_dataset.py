@@ -101,6 +101,18 @@ def write_parquet_fallback(con: duckdb.DuckDBPyConnection) -> None:
         print(f"  Wrote fallback Parquet: {out}")
 
 
+def _load_rows(con: duckdb.DuckDBPyConnection, table: str, rows: list[dict[str, object]]) -> None:
+    """Load a list of dicts into a DuckDB table via JSON string (DuckDB version-safe)."""
+    import json
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+        json.dump(rows, f)
+        tmp_path = f.name
+    con.execute(f"CREATE TABLE {table} AS SELECT * FROM read_json_auto('{tmp_path}')")
+    Path(tmp_path).unlink()
+
+
 def main() -> None:
     print("Generating synthetic GCP billing dataset...")
     con = duckdb.connect(":memory:")
@@ -109,27 +121,9 @@ def main() -> None:
     resources = generate_resource_rows()
     credits = generate_credits_rows()
 
-    con.execute(
-        """
-        CREATE TABLE gcp_billing_export AS
-        SELECT * FROM read_json_auto(?)
-    """,
-        [billing],
-    )
-    con.execute(
-        """
-        CREATE TABLE gcp_resource_usage AS
-        SELECT * FROM read_json_auto(?)
-    """,
-        [resources],
-    )
-    con.execute(
-        """
-        CREATE TABLE gcp_credits AS
-        SELECT * FROM read_json_auto(?)
-    """,
-        [credits],
-    )
+    _load_rows(con, "gcp_billing_export", billing)
+    _load_rows(con, "gcp_resource_usage", resources)
+    _load_rows(con, "gcp_credits", credits)
 
     print(f"  gcp_billing_export: {len(billing)} rows")
     print(f"  gcp_resource_usage: {len(resources)} rows")
