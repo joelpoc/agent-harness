@@ -35,5 +35,8 @@ demo-live:
 phoenix:
 	uv run python -c "import phoenix as px; px.launch_app(); input('Phoenix running at http://localhost:6006 — press Enter to stop')"
 
+evals-judge:
+	uv run python evals/run_judge_metrics.py
+
 generate-data:
 	uv run python data/generate_dataset.py
