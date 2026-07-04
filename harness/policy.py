@@ -33,6 +33,8 @@ class ToolPolicy(BaseModel):
     reason: str = ""
     # Optional: deny if any arg key matches (e.g. deny if "table" == "salaries")
     deny_if: dict[str, list[str]] = Field(default_factory=dict)
+    # AST-based SQL guard: deny if the "sql" arg contains any mutating statement
+    require_read_only_sql: bool = False
 
 
 class PolicyConfig(BaseModel):
@@ -59,8 +61,14 @@ class PolicyEngine:
         """
         for rule in self._config.tools:
             if self._matches(tool_name, rule.pattern):
-                # Check deny_if conditions
-                if rule.decision == Decision.ALLOW and rule.deny_if:
+                if rule.decision == Decision.ALLOW:
+                    # AST-based SQL guard (runs before substring check — stricter)
+                    if rule.require_read_only_sql and "sql" in args:
+                        from harness.sql_guard import is_read_only
+
+                        if not is_read_only(str(args["sql"])):
+                            return Decision.DENY, "SQL contains mutating statement (AST guard)"
+                    # Substring deny_if (general-purpose, non-SQL args)
                     for arg_key, forbidden_values in rule.deny_if.items():
                         arg_val = str(args.get(arg_key, ""))
                         if any(fv.lower() in arg_val.lower() for fv in forbidden_values):

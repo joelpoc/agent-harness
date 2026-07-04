@@ -17,14 +17,7 @@ tools:
   - pattern: query_data
     decision: ALLOW
     reason: "Read-only SQL queries"
-    deny_if:
-      sql:
-        - "DROP "
-        - "DELETE "
-        - "TRUNCATE "
-        - "ALTER "
-        - "INSERT "
-        - "UPDATE "
+    require_read_only_sql: true
 
   - pattern: generate_report
     decision: ALLOW

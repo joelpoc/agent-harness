@@ -11,7 +11,7 @@ Three-tier testing strategy:
 
 1. **Shell unit tests (blocking)**: `pytest tests/` — no model, pure Python. Prove guarantees. Always fast, always deterministic.
 2. **Golden case evals (blocking, recorded)**: `pytest evals/` — run against pre-recorded model responses (YAML fixtures). Test tool call ordering, SQL semantics, policy decisions. Never call live APIs in CI.
-3. **Judge metrics (non-blocking)**: DeepEval `continue-on-error: true` CI job. Report faithfulness and other quality metrics. They inform; they never gate a merge.
+3. **Judge metrics (non-blocking)**: `arize-phoenix-evals` `continue-on-error: true` CI job. Runs `evals/run_judge_metrics.py` — RAG relevancy metric via `llm_classify`. Uploads `judge_report.json` as a workflow artifact. They inform; they never gate a merge.
 
 ## Consequences
 - CI is fast and deterministic by default.
