@@ -73,3 +73,15 @@ Mantra: *unit tests for guarantees, evals for capabilities.*
 Python 3.12 . uv . Pydantic v2 . LiteLLM . DuckDB + Apache Iceberg . MCP . Langfuse + local JSONL . pytest + DeepEval . ruff . mypy
 
 See `docs/adr/` for all architectural decisions.
+
+## Why No Containers
+
+Nothing to orchestrate: DuckDB is embedded (a Python library, not a server),
+Phoenix is a Python library launched in-process, the agent is a single process.
+Reproducibility comes from `uv`'s lock file, not from an image.
+
+```bash
+uv sync --all-extras   # deterministic install from uv.lock
+make generate-data     # create the Iceberg warehouse
+make demo              # run everything
+```

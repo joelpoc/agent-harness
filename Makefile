@@ -1,4 +1,4 @@
-.PHONY: install test lint typecheck demo-determinism demo-policy demo demo-live phoenix docker-demo generate-data
+.PHONY: install test lint typecheck demo-determinism demo-policy demo demo-live phoenix evals-judge generate-data
 
 install:
 	uv sync --all-extras
@@ -34,9 +34,6 @@ demo-live:
 
 phoenix:
 	uv run python -c "import phoenix as px; px.launch_app(); input('Phoenix running at http://localhost:6006 — press Enter to stop')"
-
-docker-demo:
-	docker compose up --build
 
 generate-data:
 	uv run python data/generate_dataset.py
