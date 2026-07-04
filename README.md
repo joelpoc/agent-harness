@@ -68,9 +68,20 @@ make ci         # lint + typecheck + test + evals
 
 Mantra: *unit tests for guarantees, evals for capabilities.*
 
+## Observability
+
+```bash
+make phoenix                    # launch Phoenix UI at localhost:6006
+PHOENIX_ENABLED=true make demo  # agent sends OTel traces to Phoenix in real time
+make evals-judge                # run LLM-as-judge faithfulness metric (local, non-blocking)
+```
+
+Instrumented via OpenTelemetry + OpenInference — backend-agnostic. Local JSONL
+(`traces.jsonl`) is the always-on zero-dependency path.
+
 ## Stack
 
-Python 3.12 . uv . Pydantic v2 . LiteLLM . DuckDB + Apache Iceberg . MCP . Langfuse + local JSONL . pytest + DeepEval . ruff . mypy
+Python 3.12 · uv · Pydantic v2 · LiteLLM · DuckDB + Apache Iceberg · MCP · Phoenix (OTel) + local JSONL · pytest + phoenix-evals · ruff · mypy
 
 See `docs/adr/` for all architectural decisions.
 

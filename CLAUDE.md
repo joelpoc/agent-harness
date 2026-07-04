@@ -23,7 +23,7 @@ Every architectural decision serves this thesis:
 ## Architecture
 
 ```
-User → agent loop (probabilistic core, hand-rolled, ~80-100 lines)
+User → agent loop (probabilistic core, hand-rolled, ~80-120 lines)
          │ every model call / tool call passes through:
          ▼
    HOOK PIPELINE (deterministic shell)
@@ -47,8 +47,7 @@ User → agent loop (probabilistic core, hand-rolled, ~80-100 lines)
 agent-harness/
 ├── CLAUDE.md                 # this file
 ├── README.md                 # quickstart, Mermaid architecture diagram, design opinions
-├── docs/adr/                 # 001-deterministic-shell.md, 002-handrolled-loop.md,
-│                             # 003-litellm-not-openrouter.md, 004-eval-strategy.md, 005-mcp-governed-socket.md
+├── docs/adr/                 # 001–007 — every non-obvious decision documented
 ├── pyproject.toml            # uv-managed, Python 3.12
 ├── harness/                  # THE DETERMINISTIC SHELL — no imports from agent/
 │   ├── hooks.py              # hook chain: registration + execution order
@@ -57,43 +56,51 @@ agent-harness/
 │   ├── budget.py             # cost ceiling, accumulates LiteLLM cost metadata
 │   ├── redact.py             # regex PII redaction (emails, IBAN, phone); Presidio noted as prod option
 │   ├── audit.py              # JSONL audit events: who/what/args-hash/decision/tokens/cost/latency
-│   ├── tracing.py            # Langfuse + local structured spans (both, always)
+│   ├── tracing.py            # OTel/Phoenix (optional) + local JSONL spans (always)
 │   └── mcp_adapter.py        # MCPToolAdapter: discover → wrap in contract → register
 ├── agent/                    # THE PROBABILISTIC CORE — thin, swappable
 │   ├── loop.py               # hand-rolled tool-use loop
-│   └── models.py             # LiteLLM config: anthropic / vertex gemini / ollama
+│   └── models.py             # LiteLLM config: gemini / anthropic / ollama
 ├── tools/                    # one file per tool, contract-first
 ├── mcp_server/               # minimal stdio MCP server exposing describe_schema
-├── data/                     # generate_dataset.py → Iceberg tables (pyiceberg write, duckdb iceberg ext read)
+├── data/                     # generate_dataset.py → Iceberg tables (duckdb iceberg ext)
 ├── policies/default.yaml     # includes stricter rules for mcp/* tools
 ├── evals/
-│   ├── cases/                # golden YAML cases
-│   └── test_evals.py         # runs against RECORDED model responses
+│   ├── cases/                # 13 golden YAML cases
+│   ├── test_evals.py         # runs against RECORDED model responses (blocking)
+│   └── run_judge_metrics.py  # Phoenix Evals faithfulness metric (non-blocking, local)
 ├── tests/                    # unit tests for the shell (policy, budget, redact, hooks, audit)
-└── .github/workflows/ci.yml  # ruff + mypy + pytest (unit BLOCKING, evals BLOCKING, judge metrics NON-blocking)
+├── scripts/                  # demo_run.py, demo_determinism.py, demo_policy.py, record_evals.py
+└── .github/workflows/ci.yml  # ruff + mypy + pytest (unit BLOCKING, evals BLOCKING, judge NON-blocking)
 ```
 
 ## Stack (locked — do not substitute without asking)
 
-- Python 3.12, **uv** (`uv sync` must be the entire setup)
+- Python 3.12, **uv** (`uv sync --all-extras` must be the entire setup — no Docker)
 - **Pydantic v2** — all contracts, configs, policies, eval cases are typed models
-- **LiteLLM SDK** (not proxy) — model routing + per-call cost metadata; providers: `anthropic/claude-sonnet-*`, `vertex_ai/gemini-*`, `ollama/qwen2.5:7b`
+- **LiteLLM SDK** (not proxy) — model routing + per-call cost metadata
+  - Primary: `gemini/gemini-2.5-flash` or `gemini/gemini-2.5-pro` via `GEMINI_API_KEY` (Google AI Studio, free tier)
+  - Local flip: `ollama/qwen2.5:7b` (air-gapped demo path)
+  - Optional: `anthropic/claude-sonnet-4-5` via `ANTHROPIC_API_KEY`
 - **DuckDB** + **pyiceberg** — Iceberg is required for the demo (JD names it); Parquet only as documented fallback
 - **MCP official Python SDK**, stdio transport only
-- **Langfuse** (cloud free tier) + local JSONL spans with a `rich` terminal viewer — both always written
-- **pytest** (+ **DeepEval** for 1–2 judge metrics, non-blocking), **ruff**, **mypy**
-- No LangGraph, no CrewAI, no OPA, no OpenRouter, no MLflow in this repo (deliberate — see ADRs)
+- **Arize Phoenix** (local UI at `localhost:6006`) + **local JSONL spans** (always-on, zero-dep)
+  - Instrumentation via **OpenTelemetry + OpenInference** — backend-agnostic, swap to any OTLP collector
+  - Launch: `make phoenix` — no account needed
+  - Langfuse is the production team-server choice (used in prod, not in this repo — see ADR 007)
+- **pytest** (+ **arize-phoenix-evals** for 1–2 judge metrics, non-blocking), **ruff**, **mypy**
+- No LangGraph, no CrewAI, no OPA, no OpenRouter, no MLflow, no Docker in this repo (deliberate — see ADRs)
 
 ## Testing doctrine
 
 - **Shell = unit tests, blocking.** `assert policy.evaluate(create_ticket_call) == Decision.REQUIRE_APPROVAL`. Exhaustive on policy/budget/redaction/hook-ordering. These prove guarantees.
-- **Core = evals, blocking but recorded.** Golden YAML cases (10–15): expected SQL semantics, expected policy decisions for adversarial prompts, expected refusals. CI runs against **recorded model responses** — never live API calls in CI (cost, flake, determinism).
-- **Judge metrics (DeepEval) = non-blocking.** 1–2 metrics (report faithfulness). They inform, never gate.
-- Mantra encoded in CI structure: *unit tests for guarantees, evals for capabilities.*
+- **Core = evals, blocking but recorded.** 13 golden YAML cases: expected SQL semantics, expected policy decisions for adversarial prompts, expected refusals. CI runs against **recorded model responses** — never live API calls in CI (cost, flake, determinism).
+- **Judge metrics (Phoenix Evals) = non-blocking.** 1–2 metrics (report faithfulness). Run locally with `make evals-judge`. CI uploads `judge_report.json` as artifact. They inform, never gate.
+- **Mantra:** CI proves the shell with asserts; Phoenix measures the core with experiments. GitHub is where the gate lives, Phoenix is where the analysis lives.
 
 ## Conventions
 
-- Conventional commits (`feat:`, `fix:`, `docs:`, `test:`); small, reviewable commits — the git history will be read by interviewers.
+- Conventional commits (`feat:`, `fix:`, `docs:`, `test:`, `chore:`); small, reviewable commits — the git history will be read by interviewers.
 - Every non-obvious decision gets an ADR (short: context / decision / consequences).
 - Type hints everywhere; `mypy --strict` on `harness/`.
 - Docstrings state the *guarantee* a module provides, not just what it does.
@@ -104,19 +111,19 @@ agent-harness/
 
 1. **M1 — skeleton + contracts:** pyproject, layout, `contracts.py`, registry, one echo tool, loop stub that runs end-to-end with a fake model. CI green from the first commit.
 2. **M2 — the shell:** hooks.py chain, policy.py + default.yaml, budget.py, redact.py, audit.py. Full unit-test coverage. This is the thesis — highest quality bar here.
-3. **M3 — real core:** LiteLLM models.py (3 providers), hand-rolled loop with tool-use, tracing.py (Langfuse + local).
+3. **M3 — real core:** LiteLLM models.py (3 providers), hand-rolled loop with tool-use, tracing.py (OTel/Phoenix + local JSONL).
 4. **M4 — data + tools:** dataset generator → Iceberg, query_data (text-to-SQL), describe_schema, generate_report, create_ticket.
-5. **M5 — evals:** golden cases, recorded responses, CI wiring, DeepEval non-blocking job.
+5. **M5 — evals:** golden cases, recorded responses, CI wiring, Phoenix Evals non-blocking job.
 6. **M6 — MCP:** stdio server + MCPToolAdapter + stricter `mcp/*` policy rules + demo of same-shell governance.
 7. **M7 — demo polish:** README, ADRs, Mermaid, demo script, clean-clone test, rehearsal fixtures.
 
-**Cut order if time compresses:** M6 MCP → Iceberg (→Parquet) → Langfuse (→local-only) → DeepEval. **Never cut:** hook pipeline, policy gate, audit log, CI tests+evals.
+**Cut order if time compresses:** M6 MCP → Iceberg (→Parquet) → Phoenix UI (→local-only JSONL) → phoenix-evals. **Never cut:** hook pipeline, policy gate, audit log, CI tests+evals.
 
 ## Demo requirements (the code must make these trivial to perform live)
 
-1. **Determinism made visible:** same risky prompt 3× → model output varies, hook decision identical (`REQUIRE_APPROVAL`, same audit shape). Needs a `make demo-determinism` or script.
-2. **Policy block + human approval:** create_ticket → PENDING → CLI approve → executes → audit chain printed.
-3. **Model flip:** one config/flag change Claude → ollama; everything else identical.
+1. **Determinism made visible:** same risky prompt 3× → model output varies, hook decision identical (`REQUIRE_APPROVAL`, same audit shape). `make demo-determinism`.
+2. **Policy block + human approval:** create_ticket → PENDING → CLI approve → executes → audit chain printed. `make demo-policy`.
+3. **Model flip:** `DEFAULT_MODEL=ollama/qwen2.5:7b make demo` — one env var, everything else identical.
 4. **MCP same-shell:** registry listing shows native + MCP tools; MCP call hits same policy/audit with stricter limits.
 5. **Live-build slots:** adding a new tool must take <10 min on top of contracts; adding a `post_tool_call` hook (e.g., block salary columns) must take <10 lines. Keep these paths friction-free — they will be coded live in the interview.
 
@@ -126,5 +133,6 @@ agent-harness/
 - Never bypass the hook pipeline "temporarily" for debugging convenience — fix the pipeline instead.
 - Never add a dependency without an ADR justifying it against the "boring dependencies" principle.
 - Keep the loop under ~120 lines. If it grows, extract into the shell or simplify — do not reach for a framework.
-- No secrets in the repo, ever. `.env.example` documents required vars (ANTHROPIC_API_KEY, GOOGLE creds, LANGFUSE keys); config validated via Pydantic settings with clear error messages when missing.
-- Everything must work offline except cloud model calls and Langfuse: `ollama` model + local traces must give a full air-gapped demo path.
+- No secrets in the repo, ever. `.env.example` documents required vars; config validated via Pydantic settings with clear error messages when missing.
+- Everything must work offline except cloud model calls: `ollama` model + local JSONL traces must give a full air-gapped demo path. No internet dependency except the model API.
+- No Docker. Reproducibility comes from `uv.lock`, not from an image layer.
