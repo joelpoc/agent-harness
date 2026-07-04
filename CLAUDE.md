@@ -80,7 +80,7 @@ agent-harness/
 - **Pydantic v2** — all contracts, configs, policies, eval cases are typed models
 - **LiteLLM SDK** (not proxy) — model routing + per-call cost metadata
   - Primary: `gemini/gemini-2.5-flash` or `gemini/gemini-2.5-pro` via `GEMINI_API_KEY` (Google AI Studio, free tier)
-  - Local flip: `ollama/qwen2.5:7b` (air-gapped demo path)
+  - Local flip: `ollama/qwen2.5:7b` (air-gapped demo path, 16GB RAM / 4.7GB model)
   - Optional: `anthropic/claude-sonnet-4-5` via `ANTHROPIC_API_KEY`
 - **DuckDB** + **pyiceberg** — Iceberg is required for the demo (JD names it); Parquet only as documented fallback
 - **MCP official Python SDK**, stdio transport only

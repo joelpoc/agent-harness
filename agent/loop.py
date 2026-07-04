@@ -55,9 +55,15 @@ async def run(
             return f"[Budget exceeded: ${e.spent:.4f} / ${e.limit:.2f}]"
 
         # --- model call ---
+        # drop_params=True silently removes unsupported params (e.g. tool_choice
+        # is not supported by Ollama) instead of raising UnsupportedParamsError.
         t0 = time.monotonic()
         response = await litellm.acompletion(
-            model=model, messages=messages, tools=tools or None, tool_choice="auto"
+            model=model,
+            messages=messages,
+            tools=tools or None,
+            tool_choice="auto",
+            drop_params=True,
         )
         latency_ms = (time.monotonic() - t0) * 1000
 

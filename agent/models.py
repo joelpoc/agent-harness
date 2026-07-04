@@ -19,7 +19,8 @@ class ModelSettings(BaseSettings):
     #   gemini/gemini-2.5-flash            → GEMINI_API_KEY (Google AI Studio — fast default)
     #   anthropic/claude-sonnet-4-5        → ANTHROPIC_API_KEY
     #   vertex_ai/gemini-2.5-pro           → GOOGLE_APPLICATION_CREDENTIALS (Vertex AI)
-    #   ollama/qwen2.5:14b                  → local Ollama (air-gapped path)
+    #   ollama/qwen2.5:7b                   → local Ollama (air-gapped path, 16GB RAM)
+    #   ollama/qwen2.5:14b                  → local Ollama (32GB RAM recommended)
     #
     # AI Studio vs Vertex: prefix gemini/ uses GEMINI_API_KEY (free tier OK);
     # prefix vertex_ai/ uses service account — do NOT mix them up.
@@ -35,7 +36,8 @@ class ModelSettings(BaseSettings):
         "gemini-flash": "gemini/gemini-2.5-flash",  # AI Studio — fast default
         "claude": "anthropic/claude-sonnet-4-5",
         "gemini-vertex": "vertex_ai/gemini-2.5-pro",  # Vertex AI (service account)
-        "ollama": "ollama/qwen2.5:14b",  # air-gapped
+        "ollama": "ollama/qwen2.5:7b",  # air-gapped, 16GB RAM (4.7GB model)
+        "ollama-14b": "ollama/qwen2.5:14b",  # air-gapped, 32GB RAM (9GB model)
     }
 
 
