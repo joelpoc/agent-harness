@@ -18,6 +18,7 @@ import importlib
 from pathlib import Path
 
 from rich.console import Console
+from rich.markdown import Markdown
 from rich.rule import Rule
 
 # Load all tools into the registry
@@ -90,7 +91,9 @@ async def chat(model: str) -> None:
                 audit_logger=audit,
             )
 
-        console.print(f"[bold blue]agent>[/bold blue] {answer}\n")
+        console.print("[bold blue]agent>[/bold blue]")
+        console.print(Markdown(answer))
+        console.print()
         console.print(f"[dim]budget used: ${budget.spent:.4f} / ${budget.limit:.2f}[/dim]")
         console.print(Rule(style="dim"))
         console.print()
