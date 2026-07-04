@@ -48,6 +48,22 @@ make demo-determinism   # same risky prompt 3x -> model varies, hook = REQUIRE_A
 make demo-policy        # create_ticket -> PENDING -> CLI approve -> audit chain printed
 ```
 
+### Real GitHub issue (optional)
+
+```bash
+# 1. Set a fine-grained PAT (Issues: Read & Write, single repo)
+# 2. Install the binary: brew install github-mcp-server
+# 3. Add to .env:
+#      TICKETS_BACKEND=github
+#      GITHUB_PERSONAL_ACCESS_TOKEN=github_pat_...
+#      GITHUB_REPO_OWNER=<you>
+#      GITHUB_REPO_NAME=agent-harness
+TICKETS_BACKEND=github make demo-policy
+```
+
+This creates a real GitHub issue after CLI approval — same policy gate, same
+audit shape as the mock path. Air-gapped fallback: `TICKETS_BACKEND=mock` (default).
+
 ## Model Flip
 
 ```bash

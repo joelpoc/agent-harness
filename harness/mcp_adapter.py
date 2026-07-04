@@ -26,10 +26,14 @@ class MCPToolAdapter:
         self._command = server_command
         self._registry = registry
 
-    async def discover_and_register(self) -> list[str]:
+    async def discover_and_register(self, whitelist: list[str] | None = None) -> list[str]:
         """
         Connect to the MCP server, list tools, wrap each in a ToolDefinition,
         register in the registry. Returns list of registered tool names.
+
+        whitelist: if provided, only tools whose bare name (without mcp/ prefix)
+        appears in this list are registered. Use this to prevent a server with a
+        large tool surface (e.g. GitHub MCP) from flooding the agent's context.
         """
         from mcp import ClientSession, StdioServerParameters  # type: ignore[import-untyped]
         from mcp.client.stdio import stdio_client  # type: ignore[import-untyped]
@@ -43,6 +47,8 @@ class MCPToolAdapter:
                 tools_result = await session.list_tools()
 
                 for mcp_tool in tools_result.tools:
+                    if whitelist is not None and mcp_tool.name not in whitelist:
+                        continue
                     prefixed_name = f"mcp/{mcp_tool.name}"
                     input_model = self._make_input_model(prefixed_name, mcp_tool.inputSchema or {})
                     handler = self._make_handler(session, mcp_tool.name)

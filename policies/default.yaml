@@ -35,7 +35,17 @@ tools:
     decision: REQUIRE_APPROVAL
     reason: "Creates external side effects — requires human sign-off"
 
-  # MCP tools — stricter: require approval for all
+  # GitHub MCP — whitelist: only create_issues is permitted
+  # All other GitHub tools are DENY (real trust boundary; see ADR 008)
+  - pattern: mcp/github/create_issues
+    decision: REQUIRE_APPROVAL
+    reason: "GitHub issue creation — real external side effect, human approval required"
+
+  - pattern: mcp/github/*
+    decision: DENY
+    reason: "GitHub MCP tool not in whitelist — deny-by-default at trust boundary"
+
+  # All other MCP tools require approval (belt-and-suspenders for external transport)
   - pattern: mcp/*
     decision: REQUIRE_APPROVAL
-    reason: "All MCP tools require explicit human approval (belt-and-suspenders for external transport)"
+    reason: "All MCP tools require explicit human approval (external transport)"

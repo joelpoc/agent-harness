@@ -109,3 +109,29 @@ tools:
     engine = PolicyEngine.from_yaml(p)
     decision, _ = engine.evaluate("echo", {})
     assert decision == Decision.ALLOW
+
+
+# --- GitHub MCP trust boundary ---
+
+
+def test_github_whitelisted_tool_requires_approval() -> None:
+    """create_issues is the ONLY whitelisted GitHub MCP tool — must be REQUIRE_APPROVAL."""
+    engine = PolicyEngine.from_yaml(Path("policies/default.yaml"))
+    decision, _ = engine.evaluate("mcp/github/create_issues", {})
+    assert decision == Decision.REQUIRE_APPROVAL
+
+
+def test_github_unlisted_tools_are_denied() -> None:
+    """Any GitHub MCP tool NOT in the whitelist must be DENY — literal trust boundary."""
+    engine = PolicyEngine.from_yaml(Path("policies/default.yaml"))
+    unlisted = [
+        "mcp/github/list_repositories",
+        "mcp/github/get_file_contents",
+        "mcp/github/push_files",
+        "mcp/github/create_branch",
+        "mcp/github/delete_branch",
+        "mcp/github/merge_pull_request",
+    ]
+    for tool in unlisted:
+        decision, reason = engine.evaluate(tool, {})
+        assert decision == Decision.DENY, f"{tool} should be DENY but got {decision}: {reason}"

@@ -84,6 +84,9 @@ agent-harness/
   - Optional: `anthropic/claude-sonnet-4-5` via `ANTHROPIC_API_KEY`
 - **DuckDB** + **pyiceberg** — Iceberg is required for the demo (JD names it); Parquet only as documented fallback
 - **MCP official Python SDK**, stdio transport only
+  - Internal mock server (`mcp_server/`) — offline fallback, deny-by-default demo asset
+  - **GitHub MCP server** (`github-mcp-server` binary) — real trust boundary demo; whitelist-only registration; fine-grained PAT (issues-only, single repo); see ADR 008
+  - `TICKETS_BACKEND=mock|github` selects the ticketing backend; agent/policy/audit are unaware
 - **Arize Phoenix** (local UI at `localhost:6006`) + **local JSONL spans** (always-on, zero-dep)
   - Instrumentation via **OpenTelemetry + OpenInference** — backend-agnostic, swap to any OTLP collector
   - Launch: `make phoenix` — no account needed
@@ -125,7 +128,9 @@ agent-harness/
 2. **Policy block + human approval:** create_ticket → PENDING → CLI approve → executes → audit chain printed. `make demo-policy`.
 3. **Model flip:** `DEFAULT_MODEL=ollama/qwen2.5:7b make demo` — one env var, everything else identical.
 4. **MCP same-shell:** registry listing shows native + MCP tools; MCP call hits same policy/audit with stricter limits.
-5. **Live-build slots:** adding a new tool must take <10 min on top of contracts; adding a `post_tool_call` hook (e.g., block salary columns) must take <10 lines. Keep these paths friction-free — they will be coded live in the interview.
+5. **Real GitHub issue:** `TICKETS_BACKEND=github make demo-policy` → CLI approve → real issue created in this repo → audit event identical to mock path. Demonstrates the harness governing a real third-party trust boundary.
+6. **Air-gapped fallback:** `TICKETS_BACKEND=mock` (default) + `ollama/qwen2.5:14b` = fully offline demo. GitHub path is opt-in.
+7. **Live-build slots:** adding a new tool must take <10 min on top of contracts; adding a `post_tool_call` hook (e.g., block salary columns) must take <10 lines. Keep these paths friction-free — they will be coded live in the interview.
 
 ## Hard guardrails for Claude Code
 
