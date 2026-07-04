@@ -55,6 +55,7 @@ async def run(
         {"role": "user", "content": user_message},
     ]
     tools = registry.litellm_schemas()
+    _seen_calls: set[str] = set()  # loop detection: (tool_name, args_json)
 
     for _turn in range(MAX_TURNS):
         # --- pre_model_call hooks (budget check happens here) ---
@@ -107,6 +108,17 @@ async def run(
         # No tool calls -> final answer
         if not msg.tool_calls:
             return msg.content or ""
+
+        # --- loop detection: if all tool calls have been seen before, force final answer ---
+        call_keys = [f"{tc.function.name}:{tc.function.arguments}" for tc in msg.tool_calls]
+        if all(k in _seen_calls for k in call_keys):
+            nudge = (
+                "You have all the data. Provide your final text answer now — no more tool calls."
+            )
+            messages.append({"role": "user", "content": nudge})
+            continue
+        for k in call_keys:
+            _seen_calls.add(k)
 
         # --- process tool calls ---
         for tc in msg.tool_calls:
