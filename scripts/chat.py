@@ -56,7 +56,7 @@ def _register_approval_hook() -> None:
             console.print("[red]   ✗ Denied[/red]\n")
         return approved
 
-    hooks.register_approval_needed(approval_hook)
+    hooks.on_approval_needed(approval_hook)
 
 
 async def chat(model: str) -> None:
