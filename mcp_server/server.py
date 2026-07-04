@@ -19,20 +19,9 @@ from mcp import types  # type: ignore[import-untyped]
 from mcp.server import Server  # type: ignore[import-untyped]
 from mcp.server.stdio import stdio_server  # type: ignore[import-untyped]
 
+from tools.describe_schema import _format_schema, _read_schema_from_warehouse
+
 app = Server("agent-harness-mcp")
-
-SCHEMA_INFO = """
-Tables in the cloud billing warehouse:
-
-gcp_billing_export (date DATE, project_id STRING, service STRING,
-    sku STRING, usage_amount DOUBLE, cost_usd DOUBLE, currency STRING)
-
-gcp_resource_usage (date DATE, project_id STRING, resource_type STRING,
-    resource_name STRING, region STRING, utilization_pct DOUBLE)
-
-gcp_credits (date DATE, project_id STRING, credit_type STRING,
-    credit_amount_usd DOUBLE)
-"""
 
 
 @app.list_tools()
@@ -58,13 +47,11 @@ async def list_tools() -> list[types.Tool]:
 async def call_tool(name: str, arguments: dict[str, object]) -> list[types.TextContent]:
     if name == "describe_schema":
         table_name = arguments.get("table_name")
-        if table_name:
-            lines = [
-                line for line in SCHEMA_INFO.splitlines() if str(table_name).lower() in line.lower()
-            ]
-            text = "\n".join(lines) or f"Table '{table_name}' not found"
-        else:
-            text = SCHEMA_INFO.strip()
+        try:
+            schema = _read_schema_from_warehouse()
+            text = _format_schema(schema, str(table_name) if table_name else None)
+        except Exception as e:
+            text = f"Could not read schema from warehouse: {e}"
         return [types.TextContent(type="text", text=text)]
     raise ValueError(f"Unknown tool: {name}")
 
