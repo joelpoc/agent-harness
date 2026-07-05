@@ -18,7 +18,7 @@ class BackendSettings(BaseSettings):
     tickets_backend: str = Field(default="mock", alias="TICKETS_BACKEND")
 
     # GitHub MCP — fine-grained PAT, issues-only, single repo
-    github_token: str = Field(default="", alias="GITHUB_PERSONAL_ACCESS_TOKEN")
+    github_token: str = Field(default="", alias="GH_PAT")
     github_repo_owner: str = Field(default="", alias="GITHUB_REPO_OWNER")
     github_repo_name: str = Field(default="", alias="GITHUB_REPO_NAME")
 
