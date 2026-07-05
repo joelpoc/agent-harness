@@ -115,9 +115,9 @@ tools:
 
 
 def test_github_whitelisted_tool_requires_approval() -> None:
-    """create_issues is the ONLY whitelisted GitHub MCP tool — must be REQUIRE_APPROVAL."""
+    """issue_write is the ONLY whitelisted GitHub MCP tool — must be REQUIRE_APPROVAL."""
     engine = PolicyEngine.from_yaml(Path("policies/default.yaml"))
-    decision, _ = engine.evaluate("mcp/github/create_issues", {})
+    decision, _ = engine.evaluate("mcp/github/issue_write", {})
     assert decision == Decision.REQUIRE_APPROVAL
 
 
