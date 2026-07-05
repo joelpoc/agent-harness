@@ -1,114 +1,140 @@
 # agent-harness
 
-*Safety harness for AI agents — deterministic policy, budget, and audit around a probabilistic core. Runs anywhere: cloud or fully local, demoed over an Apache Iceberg lakehouse.*
+*Safety harness for AI agents — deterministic policy, budget, and audit around a probabilistic core.
+Runs anywhere: cloud or fully local, demoed over an Apache Iceberg lakehouse.*
+
+---
 
 ## Quickstart
 
 ```bash
-uv sync --all-extras           # install everything
-cp .env.example .env           # add your API keys
-uv run pytest tests/ evals/    # all tests green before first model call
+uv sync --all-extras           # install everything (uv.lock — no Docker needed)
+cp .env.example .env           # add GEMINI_API_KEY (free tier at aistudio.google.com)
+make demo                      # 4-panel live dashboard: query → report → approval → audit
 ```
+
+---
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-    U([User]) --> L[Agent Loop\nprobabilistic core]
-    L --> HPC[pre_model_call\nbudget check . prompt log]
-    HPC --> M((LiteLLM\nClaude . Gemini . Ollama))
-    M --> HTC[pre_tool_call\npolicy gate\nALLOW . DENY . REQUIRE_APPROVAL]
-    HTC --> T[Tools\nquery_data . describe_schema\ngenerate_report . create_ticket]
-    T --> HPTC[post_tool_call\nPII redact . audit JSONL . cost accounting]
-    HPTC --> L
-    HTC --> |MCP| MCP[MCP stdio server\ndescribe_schema]
-    MCP --> HPTC
+    U(["👤 User"]):::user --> L
 
-    style L fill:#f9e4b7,stroke:#e0a800
-    style HPC fill:#d4edda,stroke:#28a745
-    style HTC fill:#d4edda,stroke:#28a745
-    style HPTC fill:#d4edda,stroke:#28a745
-    style M fill:#fff3cd,stroke:#ffc107
+    subgraph CORE ["⚡ Probabilistic Core  (agent/)"]
+        L["Agent Loop\n~100 lines, hand-rolled"]
+        M(["LiteLLM\nGemini · Claude · Ollama"])
+        L -- "acompletion()" --> M
+        M -- "tool_calls" --> L
+    end
+
+    subgraph SHELL ["🛡️ Deterministic Shell  (harness/)"]
+        direction TB
+        H1["pre_model_call\n💰 budget check · 📝 prompt log"]
+        H2["pre_tool_call\n🚦 policy gate\nALLOW · DENY · REQUIRE_APPROVAL"]
+        H3["post_tool_call\n🔏 PII redact · 📋 audit JSONL · 💲 cost accounting"]
+        AP["👤 Human Approval\n(CLI prompt)"]
+    end
+
+    subgraph TOOLS ["🔧 Tools  (tools/)"]
+        T1["query_data\nDuckDB + Iceberg"]
+        T2["describe_schema"]
+        T3["generate_report"]
+        T4["create_ticket\n🔒 REQUIRE_APPROVAL"]
+        MCP["MCP stdio server\n(GitHub issues)"]
+    end
+
+    L --> H1 --> M
+    L --> H2
+    H2 -->|ALLOW| T1 & T2 & T3
+    H2 -->|REQUIRE_APPROVAL| AP --> T4
+    H2 -->|MCP| MCP
+    T1 & T2 & T3 & T4 & MCP --> H3 --> L
+
+    classDef user fill:#e8f4fd,stroke:#2196F3
+    classDef core fill:#fff9e6,stroke:#FFC107
+    classDef shell fill:#e8f5e9,stroke:#4CAF50
+    class CORE core
+    class SHELL shell
+    class U user
 ```
 
-**Yellow = probabilistic core. Green = deterministic shell.**
-
-## The Thesis
+**Yellow = probabilistic core &nbsp;·&nbsp; Green = deterministic shell**
 
 > The model is probabilistic. The enterprise's obligations are not.
+>
+> Every policy decision, audit event, and cost check is computed in Python — never in a prompt.
+> `harness/` never imports `agent/`: governance survives framework and model churn.
 
-The harness is a **deterministic shell of lifecycle hooks** around a **probabilistic core**.
-Every policy decision, audit event, and cost check is computed in Python -- never in a prompt.
-`harness/` never imports `agent/`: governance survives framework and model churn.
+---
 
 ## Demo Scripts
 
-```bash
-make demo-determinism   # same risky prompt 3x -> model varies, hook = REQUIRE_APPROVAL always
-make demo-policy        # create_ticket -> PENDING -> CLI approve -> audit chain printed
-```
+| Command | What it shows |
+|---|---|
+| `make demo` | Full flow: query → report → ticket |
+| `make demo-block` | AST guard blocks `DELETE` in real time |
+| `make demo-ticket` | `REQUIRE_APPROVAL` → CLI approve → audit chain |
+| `make demo-budget` | Budget ceiling cuts execution at $0.001 |
+| `make demo-local` | Same demo, fully offline with Ollama |
+| `make demo-determinism` | Same risky prompt 3× → model varies, hook = identical |
+| `make chat` | Interactive multi-turn REPL |
 
 ### Real GitHub issue (optional)
 
 ```bash
-# 1. Set a fine-grained PAT (Issues: Read & Write, single repo)
-# 2. Install the binary: brew install github-mcp-server
-# 3. Add to .env:
-#      TICKETS_BACKEND=github
-#      GITHUB_PERSONAL_ACCESS_TOKEN=github_pat_...
-#      GITHUB_REPO_OWNER=<you>
-#      GITHUB_REPO_NAME=agent-harness
-TICKETS_BACKEND=github make demo-policy
+# Fine-grained PAT (Issues: Read & Write, single repo) + binary:
+# brew install github-mcp-server
+TICKETS_BACKEND=github make demo-ticket
 ```
 
-This creates a real GitHub issue after CLI approval — same policy gate, same
-audit shape as the mock path. Air-gapped fallback: `TICKETS_BACKEND=mock` (default).
+Creates a real GitHub issue after CLI approval — same policy gate, same audit shape as mock.
 
-## Model Flip
-
-```bash
-DEFAULT_MODEL=ollama/qwen2.5:7b uv run python -c "
-import asyncio, tools.echo
-from agent.loop import run
-print(asyncio.run(run('echo hello world')))
-"
-```
+---
 
 ## Testing
 
 ```bash
-make test       # unit tests (shell guarantees -- blocking)
-make evals      # golden case evals (recorded responses -- blocking)
+make test       # unit tests — shell guarantees (blocking)
+make evals      # 13 golden cases — recorded responses (blocking)
 make ci         # lint + typecheck + test + evals
 ```
 
-Mantra: *unit tests for guarantees, evals for capabilities.*
+*Unit tests prove the shell with asserts. Evals measure the core with experiments.*
+
+---
 
 ## Observability
 
 ```bash
-make phoenix                    # launch Phoenix UI at localhost:6006
-PHOENIX_ENABLED=true make demo  # agent sends OTel traces to Phoenix in real time
-make evals-judge                # run LLM-as-judge faithfulness metric (local, non-blocking)
+make phoenix                          # Phoenix UI at localhost:6006
+PHOENIX_ENABLED=true make demo        # live OTel traces → Phoenix
+make evals-judge                      # LLM-as-judge: faithfulness + sql_relevance
+make upload-evals-phoenix             # upload golden cases as Phoenix Dataset + run experiment
 ```
 
-Instrumented via OpenTelemetry + OpenInference — backend-agnostic. Local JSONL
-(`traces.jsonl`) is the always-on zero-dependency path.
+Instrumented via OpenTelemetry + OpenInference — backend-agnostic. Local JSONL (`traces.jsonl`) is the always-on zero-dependency path.
+
+---
 
 ## Stack
 
-Python 3.12 · uv · Pydantic v2 · LiteLLM · DuckDB + Apache Iceberg · MCP · Phoenix (OTel) + local JSONL · pytest + phoenix-evals · ruff · mypy
+| Layer | Technology |
+|---|---|
+| Language | Python 3.12, uv |
+| Contracts | Pydantic v2 |
+| Model routing | LiteLLM (Gemini · Claude · Ollama) |
+| Data | DuckDB + Apache Iceberg |
+| Tool protocol | MCP (stdio) |
+| Observability | Arize Phoenix (OTel/OTLP) + local JSONL |
+| Testing | pytest + arize-phoenix-evals |
+| Linting | ruff · mypy |
 
-See `docs/adr/` for all architectural decisions.
+See `docs/adr/` for every non-obvious architectural decision.
+
+---
 
 ## Why No Containers
 
-Nothing to orchestrate: DuckDB is embedded (a Python library, not a server),
-Phoenix is a Python library launched in-process, the agent is a single process.
-Reproducibility comes from `uv`'s lock file, not from an image.
-
-```bash
-uv sync --all-extras   # deterministic install from uv.lock
-make generate-data     # create the Iceberg warehouse
-make demo              # run everything
-```
+DuckDB is embedded (a Python library, not a server). Phoenix launches in-process.
+The agent is a single process. Reproducibility comes from `uv.lock`, not an image layer.
