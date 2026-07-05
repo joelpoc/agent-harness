@@ -1,7 +1,7 @@
 # ADR 005 — MCP via Governed Stdio Socket
 
 ## Context
-The Cloudera JD references MCP (Model Context Protocol). We need to demonstrate MCP integration while maintaining the thesis: the shell governs all tool calls regardless of transport.
+MCP (Model Context Protocol) is becoming the standard interface between agents and enterprise systems. We need to demonstrate MCP integration while maintaining the thesis: the shell governs all tool calls regardless of transport.
 
 ## Decision
 Expose `describe_schema` via a local **stdio MCP server** (`mcp_server/server.py`). The `MCPToolAdapter` in `harness/mcp_adapter.py` discovers this server's tools and registers them in the central `ToolRegistry` with a `mcp/` prefix.
