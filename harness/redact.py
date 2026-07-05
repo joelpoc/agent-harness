@@ -46,7 +46,7 @@ def redact_dict(data: dict[str, object]) -> dict[str, object]:
         if isinstance(value, str):
             out[key] = redact(value)
         elif isinstance(value, dict):
-            out[key] = redact_dict(value)  # type: ignore[arg-type]
+            out[key] = redact_dict(value)
         elif isinstance(value, list):
             out[key] = [redact(v) if isinstance(v, str) else v for v in value]
         else:

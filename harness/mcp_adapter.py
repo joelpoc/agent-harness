@@ -35,8 +35,8 @@ class MCPToolAdapter:
         appears in this list are registered. Use this to prevent a server with a
         large tool surface (e.g. GitHub MCP) from flooding the agent's context.
         """
-        from mcp import ClientSession, StdioServerParameters  # type: ignore[import-untyped]
-        from mcp.client.stdio import stdio_client  # type: ignore[import-untyped]
+        from mcp import ClientSession, StdioServerParameters
+        from mcp.client.stdio import stdio_client
 
         registered: list[str] = []
         server_params = StdioServerParameters(command=self._command[0], args=self._command[1:])
@@ -72,12 +72,10 @@ class MCPToolAdapter:
         fields: dict[str, Any] = {}
         for prop_name, prop_schema in schema.get("properties", {}).items():
             fields[prop_name] = (str, ...)
-        return create_model(  # type: ignore[call-overload]
-            f"{tool_name}_Input", __base__=ToolInput, **fields
-        )
+        return create_model(f"{tool_name}_Input", __base__=ToolInput, **fields)
 
     def _make_output_model(self, tool_name: str) -> type[ToolOutput]:
-        return create_model(  # type: ignore[call-overload]
+        return create_model(
             f"{tool_name}_Output",
             __base__=ToolOutput,
             content=(str, ""),

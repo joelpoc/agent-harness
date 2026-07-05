@@ -11,3 +11,4 @@ data/warehouse/
 .ruff_cache/
 .pytest_cache/
 dist/
+evals/judge_report.json

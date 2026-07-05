@@ -68,18 +68,24 @@ class Tracer:
         if not self._settings.phoenix_enabled:
             return
         try:
-            from openinference.instrumentation.litellm import (  # type: ignore[import-untyped]
+            from openinference.instrumentation.litellm import (
                 LiteLLMInstrumentor,
             )
-            from phoenix.otel import register  # type: ignore[import-untyped]
+            from phoenix.otel import register
 
             register(
                 endpoint=self._settings.phoenix_collector_endpoint,
                 project_name="agent-harness",
+                batch=True,  # BatchSpanProcessor — eliminates the "use batch" warning
+                verbose=True,
             )
             LiteLLMInstrumentor().instrument()
         except Exception:
             pass  # Never block on tracing failure
+
+    @property
+    def phoenix_enabled(self) -> bool:
+        return self._settings.phoenix_enabled
 
     def write(self, span: Span) -> None:
         """Write span to local JSONL. OTel spans flow automatically via instrumentation."""

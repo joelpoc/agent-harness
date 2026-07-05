@@ -42,8 +42,9 @@ console = Console()
 policy = PolicyEngine.from_yaml(Path("policies/default.yaml"))
 
 
-def _register_approval_hook() -> None:
+def _register_approval_hook(spinner: rich.status.Status) -> None:  # type: ignore[name-defined]  # noqa: F821
     async def approval_hook(session_id: str, tool_name: str, args: dict) -> bool:  # type: ignore[type-arg]
+        spinner.stop()
         console.print(
             f"\n[bold yellow]⚠  APPROVAL REQUIRED:[/bold yellow] [cyan]{tool_name}[/cyan]"
         )
@@ -55,15 +56,19 @@ def _register_approval_hook() -> None:
             console.print("[green]   ✓ Approved[/green]\n")
         else:
             console.print("[red]   ✗ Denied[/red]\n")
+        spinner.start()
         return approved
 
     hooks.on_approval_needed(approval_hook)
 
 
 async def chat(model: str) -> None:
-    _register_approval_hook()
     budget = BudgetTracker.from_settings()
     audit = AuditLogger.from_settings()
+    history: list[dict] = []  # accumulated user+assistant turns for multi-turn context
+
+    spinner = console.status("[dim]thinking…[/dim]", spinner="dots")
+    _register_approval_hook(spinner)
 
     console.print(
         Rule(f"[bold cyan]agent-harness chat[/bold cyan] · model: [yellow]{model}[/yellow]")
@@ -82,14 +87,20 @@ async def chat(model: str) -> None:
             break
 
         console.print()
-        with console.status("[dim]thinking…[/dim]", spinner="dots"):
-            answer = await run(
-                question,
-                model=model,
-                policy_engine=policy,
-                budget=budget,
-                audit_logger=audit,
-            )
+        spinner.start()
+        answer = await run(
+            question,
+            model=model,
+            policy_engine=policy,
+            budget=budget,
+            audit_logger=audit,
+            history=history,
+        )
+        spinner.stop()
+
+        # Accumulate conversation for next turn
+        history.append({"role": "user", "content": question})
+        history.append({"role": "assistant", "content": answer})
 
         console.print("[bold blue]agent>[/bold blue]")
         console.print(Markdown(answer))
@@ -103,7 +114,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Interactive agent chat")
     parser.add_argument("--model", default=model_settings.default_model)
     args = parser.parse_args()
-    asyncio.run(chat(args.model))
+    try:
+        asyncio.run(chat(args.model))
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        pass
 
 
 if __name__ == "__main__":

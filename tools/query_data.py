@@ -68,7 +68,8 @@ registry.register(
     ToolDefinition(
         name="query_data",
         description=(
-            "Execute a SQL query against the cloud billing/usage Iceberg warehouse. "
+            "Execute a SQL statement against the cloud billing/usage warehouse. "
+            "Supports SELECT, INSERT, UPDATE, DELETE, and DDL. "
             "Returns rows and column names. ALL numbers must come from this tool — "
             "never invent or estimate figures."
         ),

@@ -25,6 +25,16 @@ from harness.hooks import hooks
 from harness.policy import Decision, PolicyEngine
 from harness.tracing import Span, tracer
 
+try:
+    from openinference.instrumentation import using_session
+    from openinference.semconv.trace import SpanAttributes
+    from opentelemetry import trace as otel_trace
+
+    _otel_tracer = otel_trace.get_tracer(__name__)
+    _OTEL_AVAILABLE = True
+except ImportError:
+    _OTEL_AVAILABLE = False
+
 MAX_TURNS = 20
 
 
@@ -35,28 +45,91 @@ async def run(
     policy_engine: PolicyEngine | None = None,
     budget: BudgetTracker | None = None,
     audit_logger: AuditLogger | None = None,
+    history: list[dict[str, Any]] | None = None,
+    system_prompt: str | None = None,
 ) -> str:
-    """Run the agent loop for a single user message. Returns final text response."""
+    """Run the agent loop for a single user message. Returns final text response.
+
+    Pass `history` to maintain multi-turn conversation context across calls.
+    history should be a list of prior {role, content} pairs (user + assistant),
+    accumulated by the caller after each turn.
+    Pass `system_prompt` to override the default system message (e.g. for demo scenarios).
+    """
     model = model or model_settings.default_model
     session_id = session_id or str(uuid.uuid4())[:8]
     budget = budget or BudgetTracker.from_settings()
     audit_logger = audit_logger or AuditLogger.from_settings()
 
-    messages: list[dict[str, Any]] = [
-        {
-            "role": "system",
-            "content": (
-                "You are a data analysis assistant with access to a GCP billing warehouse. "
-                "Available tools: describe_schema (get table columns), query_data (run SQL), "
-                "generate_report (format output), create_ticket (requires human approval). "
-                "The warehouse contains ~90 days of GCP billing data. "
-                "When asked about dates or time ranges, use query_data to check MAX(date) first. "
-                "Always use tools to get real data — never guess or estimate numbers. "
-                "Once you have the data needed, respond with a clear text answer and stop calling tools."  # noqa: E501
-            ),
-        },
-        {"role": "user", "content": user_message},
-    ]
+    # When Phoenix is enabled, wrap the session in an OTel agent span so all
+    # turns and tool calls are grouped under one session_id in the Phoenix UI.
+    if _OTEL_AVAILABLE and tracer.phoenix_enabled:
+        with _otel_tracer.start_as_current_span(
+            "agent",
+            attributes={SpanAttributes.OPENINFERENCE_SPAN_KIND: "agent"},
+        ) as span:
+            span.set_attribute(SpanAttributes.SESSION_ID, session_id)
+            span.set_attribute(SpanAttributes.INPUT_VALUE, user_message)
+            with using_session(session_id):
+                result = await _run_loop(
+                    user_message=user_message,
+                    model=model,
+                    session_id=session_id,
+                    policy_engine=policy_engine,
+                    budget=budget,
+                    audit_logger=audit_logger,
+                    history=history,
+                    system_prompt=system_prompt,
+                )
+            span.set_attribute(SpanAttributes.OUTPUT_VALUE, result)
+        return result
+
+    return await _run_loop(
+        user_message=user_message,
+        model=model,
+        session_id=session_id,
+        policy_engine=policy_engine,
+        budget=budget,
+        audit_logger=audit_logger,
+        history=history,
+        system_prompt=system_prompt,
+    )
+
+
+_DEFAULT_SYSTEM_PROMPT = (
+    "You are a data analysis assistant with access to a GCP billing warehouse. "
+    "Available tools: describe_schema (get table columns), query_data (run SQL), "
+    "generate_report (format output), create_ticket (requires human approval). "
+    "The warehouse contains ~90 days of GCP billing data. "
+    "Always use DuckDB date functions for relative time ranges — never hardcode dates. "
+    "Examples: last 30 days → date >= CURRENT_DATE - INTERVAL '30 days'; "
+    "last month → date >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month') "
+    "AND date < DATE_TRUNC('month', CURRENT_DATE); "
+    "this month → date >= DATE_TRUNC('month', CURRENT_DATE). "
+    "Always use tools to get real data — never guess or estimate numbers. "
+    "Once you have the data needed, respond with a clear text answer and stop calling tools."
+)
+
+
+async def _run_loop(
+    user_message: str,
+    model: str,
+    session_id: str,
+    policy_engine: PolicyEngine | None,
+    budget: BudgetTracker,
+    audit_logger: AuditLogger,
+    history: list[dict[str, Any]] | None,
+    system_prompt: str | None = None,
+) -> str:
+    """Inner loop — separated so run() can wrap it in an OTel session span."""
+    system_message: dict[str, Any] = {
+        "role": "system",
+        "content": system_prompt or _DEFAULT_SYSTEM_PROMPT,
+    }
+    messages: list[dict[str, Any]] = (
+        [system_message, *history, {"role": "user", "content": user_message}]
+        if history
+        else [system_message, {"role": "user", "content": user_message}]
+    )
     tools = registry.litellm_schemas()
     _seen_calls: set[str] = set()  # loop detection: (tool_name, args_json)
 

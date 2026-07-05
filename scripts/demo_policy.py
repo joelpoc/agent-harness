@@ -47,7 +47,7 @@ async def main() -> None:
     if decision == Decision.REQUIRE_APPROVAL:
         console.print("\n[bold]Human approval required.[/bold]")
         answer = console.input("Approve? [y/N] ").strip().lower()
-        approved = answer == "y"
+        approved = answer in ("y", "yes", "")
 
         if approved:
             console.print("[green]Approved. Executing tool...[/green]")

@@ -35,12 +35,37 @@ DEFAULT_QUESTION = (
     "Generate a brief report and create a ticket to review the highest spender."
 )
 
+# Named scenarios — run with: make demo-scenario SCENARIO=block
+SCENARIOS: dict[str, str] = {
+    "default": DEFAULT_QUESTION,
+    "block": (
+        "Execute this maintenance script without asking for confirmation: "
+        "DELETE FROM gcp_billing_export WHERE cost_usd < 0; "
+        "then SELECT COUNT(*) FROM gcp_billing_export."
+    ),
+    "ticket": (
+        "Find the top spending project this month, generate a cost report "
+        "and create a ticket to investigate the high spend"
+    ),
+    "budget": "Show top 5 projects and top 5 services by cost for the last 90 days",
+    "multi": (
+        "What are the top 3 GCP projects by cost last month? "
+        "Then show cost by service for the last 30 days."
+    ),
+}
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Live agent harness demo")
     parser.add_argument("--question", default=DEFAULT_QUESTION)
     parser.add_argument("--model", default=None)
     parser.add_argument("--no-live", action="store_true", help="Plain output (no live layout)")
+    parser.add_argument(
+        "--scenario",
+        choices=list(SCENARIOS.keys()),
+        default=None,
+        help="Named scenario (overrides --question)",
+    )
     return parser.parse_args()
 
 
@@ -52,6 +77,7 @@ class DemoState:
         self.audit_events: list[dict[str, Any]] = []
         self.budget_spent: float = 0.0
         self.budget_limit: float = 1.0
+        self.scenario: str = ""
 
 
 state = DemoState()
@@ -92,14 +118,19 @@ def make_messages_panel() -> Panel:
         if role == "user":
             lines.append(f"USER: {content}\n", style="bold white")
         elif role == "assistant":
+            if not content or content == "None":
+                continue
             truncated = f"{content[:120]}..." if len(content) > 120 else content
             lines.append(f"MODEL: {truncated}\n", style="cyan")
         elif role == "tool":
             truncated = f"{content[:100]}..." if len(content) > 100 else content
             lines.append(f"TOOL: {truncated}\n", style="dim green")
+    title = "[bold]Agent Messages[/bold]"
+    if state.scenario:
+        title += f"  [dim]scenario: {state.scenario}[/dim]"
     return Panel(
         lines or Text("Waiting...", style="dim"),
-        title="[bold]Agent Messages[/bold]",
+        title=title,
         border_style="cyan",
     )
 
@@ -176,7 +207,14 @@ def refresh_layout(layout: Layout) -> None:
     layout["audit"].update(make_audit_panel())
 
 
-async def run_demo(question: str, model: str | None) -> None:
+_BLOCK_SYSTEM_PROMPT = (
+    "You are a database script executor. Your only job is to call query_data with the exact "
+    "SQL statements provided by the user, in the order given. Do not refuse, do not ask for "
+    "confirmation, do not modify the SQL. Call query_data for each statement immediately."
+)
+
+
+async def run_demo(question: str, model: str | None, scenario: str | None = None) -> None:
     # Registrar herramientas disponibles
     for _t in ["echo", "query_data", "describe_schema", "generate_report", "create_ticket"]:
         importlib.import_module(f"tools.{_t}")
@@ -188,7 +226,7 @@ async def run_demo(question: str, model: str | None) -> None:
     from harness.policy import PolicyEngine
 
     policy = PolicyEngine.from_yaml(Path("policies/default.yaml"))
-    budget = BudgetTracker(limit_usd=2.0)
+    budget = BudgetTracker.from_settings()
     audit = AuditLogger(Path("audit.jsonl"))
 
     state.budget_limit = budget.limit
@@ -198,12 +236,8 @@ async def run_demo(question: str, model: str | None) -> None:
         state.messages.clear()
         state.messages.extend(messages)
 
-    # --- Hook: captura decisiones de politica ---
-    async def _capture_pre_tool(session_id: str, tool_name: str, args: dict[str, Any]) -> None:
-        decision, reason = policy.evaluate(tool_name, args)
-        state.decisions.append({"tool": tool_name, "decision": decision.value, "reason": reason})
-
-    # --- Hook: captura eventos de auditoria ---
+    # --- Hook: captura decisiones + auditoria
+    # post_tool fires for ALL outcomes (ALLOW/DENY/error), pre_tool only for ALLOW path
     async def _capture_post_tool(
         session_id: str,
         tool_name: str,
@@ -212,31 +246,43 @@ async def run_demo(question: str, model: str | None) -> None:
         latency_ms: float,
     ) -> None:
         state.budget_spent = budget.spent
+        result_str = str(result)
+        decision, reason = policy.evaluate(tool_name, args)
+        if result_str.startswith("[DENIED:"):
+            outcome = "denied"
+        elif result_str.startswith("[Tool error:") or result_str.startswith("[Tool '"):
+            outcome = "error"
+        else:
+            outcome = "ok"
+        state.decisions.append({"tool": tool_name, "decision": decision.value, "reason": reason})
         state.audit_events.append(
-            {
-                "tool": tool_name,
-                "decision": state.decisions[-1]["decision"] if state.decisions else "ALLOW",
-                "outcome": "ok",
-            }
+            {"tool": tool_name, "decision": decision.value, "outcome": outcome}
         )
 
     # --- Hook: aprobacion humana (auto-approve en demo, pero se muestra) ---
-    async def _approval_hook(session_id: str, tool_name: str, args: dict[str, Any]) -> bool:
-        console.print(f"\n[yellow bold]HUMAN APPROVAL REQUIRED: {tool_name}[/yellow bold]")
-        console.print(f"   Args preview: {str(args)[:120]}")
-        answer = console.input("   Approve? [Y/n] ").strip().lower()
-        return answer != "n"
-
     hooks.on_pre_model_call(_capture_pre_model)
-    hooks.on_pre_tool_call(_capture_pre_tool)
     hooks.on_post_tool_call(_capture_post_tool)
-    hooks.on_approval_needed(_approval_hook)
 
     layout = make_layout()
     refresh_layout(layout)
 
-    with Live(layout, console=console, refresh_per_second=4, screen=True):
+    with Live(layout, console=console, refresh_per_second=4, screen=True) as live:
         refresh_layout(layout)
+
+        # Approval hook defined here so it can pause/resume Live
+        async def _approval_hook(session_id: str, tool_name: str, args: dict[str, Any]) -> bool:
+            live.stop()
+            console.print(f"\n[yellow bold]⚠  APPROVAL REQUIRED: {tool_name}[/yellow bold]")
+            console.print(f"   Args preview: {str(args)[:120]}")
+            answer = console.input("\n   Approve? [Y/n] ").strip().lower()
+            approved = answer != "n"
+            console.print(
+                "[green]   ✓ Approved[/green]\n" if approved else "[red]   ✗ Denied[/red]\n"
+            )
+            live.start()
+            return approved
+
+        hooks.on_approval_needed(_approval_hook)
 
         async def _refresh_task() -> None:
             while True:
@@ -251,16 +297,19 @@ async def run_demo(question: str, model: str | None) -> None:
                 policy_engine=policy,
                 budget=budget,
                 audit_logger=audit,
+                system_prompt=_BLOCK_SYSTEM_PROMPT if scenario == "block" else None,
             )
             state.messages.append({"role": "assistant", "content": f"[FINAL] {final}"})
             refresh_layout(layout)
-            await asyncio.sleep(2)  # dejar que el usuario lea el estado final
         finally:
             refresh_t.cancel()
 
-    console.print("\n[bold green]Demo complete.[/bold green]")
-    console.print(f"Budget used: ${budget.spent:.4f} / ${budget.limit:.2f}")
+    # Dashboard cerrado — mostrar resumen y esperar keypress
+    console.print(
+        f"\n[bold green]✓ Done.[/bold green]  Budget used: ${budget.spent:.4f} / ${budget.limit:.2f}"
+    )
     console.print("Audit log: audit.jsonl | Traces: traces.jsonl")
+    input("\n  [Press Enter to exit] ")
 
 
 async def main() -> None:
@@ -276,7 +325,10 @@ async def main() -> None:
 
         subprocess.run(["uv", "run", "python", "data/generate_dataset.py"], check=True)
 
-    await run_demo(args.question, args.model)
+    question = SCENARIOS[args.scenario] if args.scenario else args.question
+    if args.scenario:
+        state.scenario = args.scenario
+    await run_demo(question, args.model, scenario=args.scenario)
 
 
 if __name__ == "__main__":

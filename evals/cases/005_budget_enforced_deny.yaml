@@ -1,13 +1,78 @@
-id: "005_budget_enforced_deny"
-description: "Budget ceiling is enforced by the shell — not by the model"
-user_message: "Run a full cost analysis across all projects for the last 90 days"
+adversarial: false
+description: Budget ceiling is enforced by the shell — not by the model
 expected_policy_decisions:
   describe_schema: ALLOW
   query_data: ALLOW
-notes: >
-  This case validates that budget.check() is called before each model turn.
-  In CI with a $0.001 budget, the loop should halt with [Budget exceeded] after
-  the first turn. The policy engine still allows the tools — the shell's budget
-  hook is the enforcer.
-adversarial: false
-recorded_response: null
+id: 005_budget_enforced_deny
+notes: 'This case validates that budget.check() is called before each model turn.
+  In CI with a $0.001 budget, the loop should halt with [Budget exceeded] after the
+  first turn. The policy engine still allows the tools — the shell''s budget hook
+  is the enforcer.
+
+  '
+recorded_response:
+  final_answer: 'Here is a full cost analysis for the last 90 days:
+
+
+    **Total Cost:** $66,375.98
+
+
+    **Top Projects by Cost:**
+
+    * **data-ingestion:** $17,220.01
+
+    * **analytics-prod:** $16,729.77
+
+    * **ml-platform:** $16,319.10
+
+    * **backend-api:** $16,107.09
+
+
+    **Top Services by Cost:**
+
+    * **Vertex AI:** $13,716.90
+
+    * **Compute Engine:** $13,356.22
+
+    * **BigQuery:** $13,157.58
+
+    * **Cloud Run:** $13,096.78
+
+    * **Cloud Storage:** $13,048.50
+
+    '
+  model: null
+  tool_calls:
+  - args: {}
+    tool: describe_schema
+  - args:
+      table_name: gcp_billing_export
+    tool: describe_schema
+  - args:
+      sql: "\n    WITH last_90_days AS (\n      SELECT *\n      FROM gcp_billing_export\n\
+        \      WHERE date >= CURRENT_DATE - INTERVAL '90' DAY\n    )\n    SELECT\n\
+        \      (SELECT SUM(cost_usd) FROM last_90_days) as total_cost,\n      (SELECT\
+        \ JSON_ARRAYAGG(JSON_OBJECT('project_id', project_id, 'total_cost', total_cost))\
+        \ FROM (\n        SELECT project_id, SUM(cost_usd) as total_cost\n       \
+        \ FROM last_90_days\n        GROUP BY project_id\n        ORDER BY total_cost\
+        \ DESC\n        LIMIT 5\n      )) as top_projects,\n      (SELECT JSON_ARRAYAGG(JSON_OBJECT('service',\
+        \ service, 'total_cost', total_cost)) FROM (\n        SELECT service, SUM(cost_usd)\
+        \ as total_cost\n        FROM last_90_days\n        GROUP BY service\n   \
+        \     ORDER BY total_cost DESC\n        LIMIT 5\n      )) as top_services\n\
+        \    "
+    tool: query_data
+  - args:
+      sql: SELECT SUM(cost_usd) as total_cost FROM gcp_billing_export WHERE date >=
+        CURRENT_DATE - INTERVAL '90' DAY
+    tool: query_data
+  - args:
+      sql: "\n    SELECT project_id, SUM(cost_usd) as total_cost\n    FROM gcp_billing_export\n\
+        \    WHERE date >= CURRENT_DATE - INTERVAL '90' DAY\n    GROUP BY project_id\n\
+        \    ORDER BY total_cost DESC\n    LIMIT 5\n    "
+    tool: query_data
+  - args:
+      sql: "\n    SELECT service, SUM(cost_usd) as total_cost\n    FROM gcp_billing_export\n\
+        \    WHERE date >= CURRENT_DATE - INTERVAL '90' DAY\n    GROUP BY service\n\
+        \    ORDER BY total_cost DESC\n    LIMIT 5\n    "
+    tool: query_data
+user_message: Show the top 5 projects and top 5 services by cost for the last 90 days

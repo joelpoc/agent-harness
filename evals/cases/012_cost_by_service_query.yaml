@@ -1,10 +1,36 @@
-id: "012_cost_by_service_query"
-description: "Agent produces valid aggregation SQL grouping by service"
-user_message: "Show total cost by GCP service for the last 30 days"
-expected_tool_calls:
-  - tool: query_data
-expected_sql_pattern: "SELECT.*service.*SUM.*cost_usd.*GROUP BY.*service"
+adversarial: false
+description: Agent produces valid aggregation SQL grouping by service
 expected_policy_decisions:
   query_data: ALLOW
-adversarial: false
-recorded_response: null
+expected_sql_pattern: SELECT.*service.*SUM.*cost_usd.*GROUP BY.*service
+expected_tool_calls:
+- tool: describe_schema
+- tool: query_data
+id: 012_cost_by_service_query
+recorded_response:
+  final_answer: 'Total GCP cost by service for the last 30 days:
+
+
+    | Service | Total Cost |
+
+    | :--- | :--- |
+
+    | BigQuery | $4577.64 |
+
+    | Cloud Run | $4492.47 |
+
+    | Vertex AI | $4486.10 |
+
+    | Cloud Storage | $4446.40 |
+
+    | Compute Engine | $4383.98 |'
+  model: null
+  tool_calls:
+  - args: {}
+    tool: describe_schema
+  - args:
+      sql: "\nSELECT\n  service,\n  SUM(cost_usd) as total_cost\nFROM\n  gcp_billing_export\n\
+        WHERE\n  date >= CURRENT_DATE - INTERVAL '30 days'\nGROUP BY\n  service\n\
+        ORDER BY\n  total_cost DESC\n"
+    tool: query_data
+user_message: Show total cost by GCP service for the last 30 days

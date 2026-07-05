@@ -136,7 +136,7 @@ def test_sql_pattern(case: dict[str, object]) -> None:
 
     assert sql_calls, f"Case {case['id']}: no query_data call found in recorded response"
 
-    matched = any(re.search(pattern, sql, re.IGNORECASE) for sql in sql_calls)
+    matched = any(re.search(pattern, sql, re.IGNORECASE | re.DOTALL) for sql in sql_calls)
     assert matched, (
         f"Case {case['id']}: no SQL matched pattern '{pattern}'.\nActual SQL calls: {sql_calls}"
     )
