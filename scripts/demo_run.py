@@ -306,7 +306,8 @@ async def run_demo(question: str, model: str | None, scenario: str | None = None
 
     # Dashboard cerrado — mostrar resumen y esperar keypress
     console.print(
-        f"\n[bold green]✓ Done.[/bold green]  Budget used: ${budget.spent:.4f} / ${budget.limit:.2f}"
+        f"\n[bold green]✓ Done.[/bold green]"
+        f"  Budget used: ${budget.spent:.4f} / ${budget.limit:.2f}"
     )
     console.print("Audit log: audit.jsonl | Traces: traces.jsonl")
     input("\n  [Press Enter to exit] ")
