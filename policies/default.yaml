@@ -30,7 +30,7 @@ tools:
 
   # GitHub MCP — whitelist: only create_issues is permitted
   # All other GitHub tools are DENY (real trust boundary; see ADR 008)
-  - pattern: mcp/github/create_issues
+  - pattern: mcp/github/issue_write
     decision: REQUIRE_APPROVAL
     reason: "GitHub issue creation — real external side effect, human approval required"
 

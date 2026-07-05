@@ -57,8 +57,9 @@ async def _call_github_mcp_create_issue(title: str, body: str) -> tuple[str, str
         async with ClientSession(read, write) as session:
             await session.initialize()
             result = await session.call_tool(
-                "create_issue",
+                "issue_write",
                 {
+                    "method": "create",
                     "owner": settings.github_repo_owner,
                     "repo": settings.github_repo_name,
                     "title": title,
