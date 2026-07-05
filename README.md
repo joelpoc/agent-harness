@@ -1,6 +1,6 @@
 # agent-harness
 
-*A deterministic shell for probabilistic agents -- policy, budgets, audit, and evals around a swappable core. Demoed on a Data Ops agent over Apache Iceberg.*
+*Safety harness for AI agents — deterministic policy, budget, and audit around a probabilistic core. Runs anywhere: cloud or fully local, demoed over an Apache Iceberg lakehouse.*
 
 ## Quickstart
 
